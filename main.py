@@ -63,6 +63,10 @@ def upload_excel_to_drive(
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"No existe el archivo: {file_path}")
 
+    delete_previous_excels_from_drive(
+        folder_id=DRIVE_UPLOAD_FOLDER_ID,
+        filename_prefix="precios_djjchile"
+    )
     scopes = ["https://www.googleapis.com/auth/drive.file"]
     creds = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_JSON, scopes=scopes
@@ -93,6 +97,47 @@ def upload_excel_to_drive(
 
     return uploaded_file
 
+def delete_previous_excels_from_drive(
+    folder_id: str,
+    filename_prefix: str
+):
+    """
+    Elimina archivos Excel en Drive dentro de una carpeta
+    cuyo nombre comience con filename_prefix
+    """
+
+    scopes = ["https://www.googleapis.com/auth/drive"]
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_JSON, scopes=scopes
+    )
+    service = build("drive", "v3", credentials=creds)
+
+    query = (
+        f"'{folder_id}' in parents "
+        f"and mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' "
+        f"and name contains '{filename_prefix}' "
+        f"and trashed = false"
+    )
+
+    results = service.files().list(
+        q=query,
+        fields="files(id, name)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+
+    files = results.get("files", [])
+
+    if not files:
+        print("🟢 No hay archivos antiguos que eliminar")
+        return
+
+    for f in files:
+        service.files().delete(
+            fileId=f["id"],
+            supportsAllDrives=True
+        ).execute()
+        print(f"🗑️ Eliminado de Drive: {f['name']}")
 # ======================================================
 # EXCEL
 # ======================================================
@@ -223,7 +268,7 @@ def export_to_excel(results, output_file="output_prices_djichile.xlsx"):
                 ws.cell(row=row_idx, column=col).fill = highlight
 
     wb.save(output_file)
-    upload_excel_to_drive(output_file, DRIVE_UPLOAD_FOLDER_ID, f"precios_Djichile_{FECHA}")
+    upload_excel_to_drive(output_file, DRIVE_UPLOAD_FOLDER_ID, f"precios_djjchile_{FECHA}.xlsx")
     print(f"📊 Excel generado correctamente: {output_file}")
 # ======================================================
 # MAIN
